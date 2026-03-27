@@ -1,0 +1,18 @@
+--From local machine using Snowflake CLI - Powershell
+
+
+-- Step 1: snow connection test
+-- Step 2: snow sql
+-- Step 3: USE DATABASE DATA_PROVIDER_SSA;
+
+-- If Stage & File Format is not yet created
+-- Step 3a: CREATE OR REPLACE FILE FORMAT SSA_NAMES_CSV TYPE=CSV SKIP_HEADER=1 COMMENT='For SSA Names File';
+-- Step 3b: CREATE STAGE SSA_NAMES SET FILE_FORMAT = SSA_NAMES_CSV;
+
+-- Step 4: Make sure files aren't currently in Stage: LIST @SSA_NAMES;
+-- Step 4a: If files are in Stage: REMOVE @SSA_NAMES;
+
+-- Step 5: Using actual local path: PUT file://C:\Users\Charles\Documents\Inferlytica\datasets\MVP\ssa\ssa_names_full.csv @SSA_NAMES;
+-- Step 6: COPY INTO DATA_PROVIDER_SSA.RAW.FIRST_NAME_GENDER_QUANTITY_YEAR FROM @SSA_NAMES;
+-- Step 7: Verify Row count appears accurate based on results in Step 6 (empty rows are skipped I think)
+-- Step 8: Clean up Stage: REMOVE @SSA_NAMES;
