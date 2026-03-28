@@ -7,7 +7,7 @@
 
 -- If Stage & File Format is not yet created
 -- Step 3a: CREATE OR REPLACE FILE FORMAT SSA_NAMES_CSV TYPE=CSV SKIP_HEADER=1 COMMENT='For SSA Names File';
--- Step 3b: CREATE STAGE SSA_NAMES SET FILE_FORMAT = SSA_NAMES_CSV;
+-- Step 3b: CREATE STAGE SSA_NAMES FILE_FORMAT = SSA_NAMES_CSV;
 
 -- Step 4: Make sure files aren't currently in Stage: LIST @SSA_NAMES;
 -- Step 4a: If files are in Stage: REMOVE @SSA_NAMES;
