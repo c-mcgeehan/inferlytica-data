@@ -8,6 +8,7 @@ INITIALIZE = ON_CREATE
 as
 select
     CUSTOMER_ID,
+    BATCH_ID,
     RECORD_ID,
     FIRST_NAME as FIRST_NAME_RAW,
     LAST_NAME as LAST_NAME_RAW,
@@ -15,9 +16,11 @@ select
     INFERLYTICA.UTILITY.NORMALIZE_NAME(FIRST_NAME) as FIRST_NAME_CLEAN,
     INFERLYTICA.UTILITY.NORMALIZE_NAME(LAST_NAME) as LAST_NAME_CLEAN,
     INFERLYTICA.UTILITY.NORMALIZE_ZIP5(ZIP) as ZIP5,
-    case when FIRST_NAME is null or  FIRST_NAME_CLEAN = '' then 1 else 0 end as FIRST_NAME_MISSING_FLAG,
-    case when ZIP is null or ZIP5 = '' then 1 else 0 end as ZIP_MISSING_FLAG,
+    case when FIRST_NAME_CLEAN is null then 1 else 0 end as FIRST_NAME_MISSING_FLAG,
+    case when LAST_NAME_CLEAN is null then 1 else 0 end as LAST_NAME_MISSING_FLAG,
+    case when ZIP5 is null then 1 else 0 end as ZIP_UNUSABLE_FLAG,
     length(FIRST_NAME_CLEAN) as FIRST_NAME_LENGTH,
+    length(LAST_NAME_CLEAN) as LAST_NAME_LENGTH,
     LOAD_TS
 from CUSTOMER.RAW.PERSON_INPUT;
 
