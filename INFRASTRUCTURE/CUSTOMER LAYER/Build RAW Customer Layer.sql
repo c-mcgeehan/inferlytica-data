@@ -3,7 +3,7 @@ CREATE SCHEMA CUSTOMER.RAW;
 
 
 create or replace transient table CUSTOMER.RAW.PERSON_INPUT (
-    CUSTOMER_ID NUMBER(32,0),
+    CLIENT_ID NUMBER(32,0),
     BATCH_ID NUMBER(32, 0),
     RECORD_ID varchar,
     FIRST_NAME varchar,
