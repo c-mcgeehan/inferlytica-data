@@ -1,0 +1,17 @@
+create or replace table CUSTOMER.ANALYTICS.BATCH_GENDER_SUMMARY (
+    CLIENT_ID varchar,
+    BATCH_ID varchar,
+    MODEL_VERSION varchar,
+    TOTAL_RECORDS number,
+    USABLE_FIRST_NAME_RECORDS number,
+    SSA_LOOKUP_MATCH_RECORDS number,
+    SSA_LOOKUP_MATCH_RATE number(10,6),
+    HIGH_CONFIDENCE_RECORDS number,
+    MEDIUM_CONFIDENCE_RECORDS number,
+    LOW_CONFIDENCE_RECORDS number,
+    AMBIGUOUS_RECORDS number,
+    REPORTABLE_M_RECORDS number,
+    REPORTABLE_F_RECORDS number,
+    REPORTABLE_U_RECORDS number,
+    PROCESSED_TS timestamp_ntz
+);
