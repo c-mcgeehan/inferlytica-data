@@ -1,0 +1,39 @@
+-- This script will compare the SSA predictions to Voter self reported data
+
+SELECT 
+ssa.CONFIDENCE_LEVEL,
+sum(case when ssa.predicted_gender = voter.gender then 1 else 0 end) / count(*) AS SSA_PREDICTED_ACCURACY,
+sum(case when ssa.reportable_gender = voter.gender then 1 else 0 end) / count(*) AS SSA_REPORTED_ACCURACY,
+COUNT(*),
+FROM DATA_PROVIDER_SSA.ANALYTICS.FIRST_NAME_GENDER_QUANTITY_LOOKUP ssa
+INNER JOIN DATA_PROVIDER_VOTER.STAGE.STATE_WA_VOTER_REGISTRATION
+ON ssa.first_name = voter.first_name
+group by ssa.CONFIDENCE_LEVEL;
+
+SELECT 
+ssa.CONFIDENCE_LEVEL,
+sum(case when ssa.predicted_gender = voter.gender then 1 else 0 end) / count(*) AS SSA_PREDICTED_ACCURACY,
+sum(case when ssa.reportable_gender = voter.gender then 1 else 0 end) / count(*) AS SSA_REPORTED_ACCURACY,
+floor(ssa.max_probability * 10) / 10,
+COUNT(*),
+FROM DATA_PROVIDER_SSA.ANALYTICS.FIRST_NAME_GENDER_QUANTITY_LOOKUP ssa
+INNER JOIN DATA_PROVIDER_VOTER.STAGE.STATE_WA_VOTER_REGISTRATION voter
+ON ssa.first_name = voter.first_name
+group by ssa.CONFIDENCE_LEVEL;
+
+
+SELECT 
+    ssa.CONFIDENCE_LEVEL,
+    FLOOR(ssa.MAX_PROBABILITY * 10) / 10 AS MAX_PROBABILITY_BUCKET,
+    SUM(CASE WHEN ssa.PREDICTED_GENDER = voter.GENDER THEN 1 ELSE 0 END) / COUNT(*)::FLOAT AS SSA_PREDICTED_ACCURACY,
+    SUM(CASE WHEN ssa.REPORTABLE_GENDER = voter.GENDER THEN 1 ELSE 0 END) / COUNT(*)::FLOAT AS SSA_REPORTED_ACCURACY,
+    COUNT(*) AS RECORD_COUNT
+FROM DATA_PROVIDER_SSA.ANALYTICS.FIRST_NAME_GENDER_QUANTITY_LOOKUP ssa
+INNER JOIN DATA_PROVIDER_VOTER.STAGE.STATE_WA_VOTER_REGISTRATION voter
+    ON ssa.FIRST_NAME = voter.FIRST_NAME
+GROUP BY 
+    ssa.CONFIDENCE_LEVEL,
+    FLOOR(ssa.MAX_PROBABILITY * 10) / 10
+ORDER BY 
+    ssa.CONFIDENCE_LEVEL,
+    MAX_PROBABILITY_BUCKET;
