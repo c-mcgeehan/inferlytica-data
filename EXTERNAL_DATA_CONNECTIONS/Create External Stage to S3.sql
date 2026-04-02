@@ -1,0 +1,106 @@
+
+
+
+CREATE OR REPLACE STORAGE INTEGRATION S3_INGEST_DATA_INTEGRATION
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = S3
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::151562994023:role/snowflake_s3_ingest_role'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/', 's3://inferlytica-snowflake-provider-data-151562994023-us-east-1-an/uploads');
+
+
+  DESC INTEGRATION S3_INGEST_DATA_INTEGRATION;
+  --Update S3 IAM Role:
+  --STORAGE_AWS_IAM_USER_ARN	String	arn:aws:iam::004878718171:user/64ll1000-s
+  --STORAGE_AWS_EXTERNAL_ID	String	NVC23198_SFCRole=3_IjbJ/7NsEouUb0Sd7waRZNemO+k=
+
+
+SELECT SYSTEM$VALIDATE_STORAGE_INTEGRATION(
+  'S3_INGEST_DATA_INTEGRATION',
+  's3://inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/',
+  'validate_list.txt',
+  'list'
+);
+
+SELECT SYSTEM$VALIDATE_STORAGE_INTEGRATION(
+  'S3_INGEST_DATA_INTEGRATION',
+  's3://inferlytica-snowflake-provider-data-151562994023-us-east-1-an/uploads/',
+  'validate_list.txt',
+  'list'
+);
+
+SELECT SYSTEM$VALIDATE_STORAGE_INTEGRATION(
+  'S3_INGEST_DATA_INTEGRATION',
+  's3://inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/',
+  'updated_sample.csv',
+  'read'
+);
+
+LIST @CUSTOMER.FILE_PROCESSING.CLIENT_DATA_STAGE PATTERN='.*updated_sample\\.csv';
+
+CREATE OR REPLACE STAGE CUSTOMER.FILE_PROCESSING.CLIENT_DATA_STAGE
+  URL = 's3://inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/'
+  STORAGE_INTEGRATION = S3_INGEST_DATA_INTEGRATION;
+
+  CREATE OR REPLACE STAGE DATA_PROVIDER_SSA.RAW.PROVIDER_DATA_STAGE
+  URL = 's3://inferlytica-snowflake-provider-data-151562994023-us-east-1-an/uploads/'
+  STORAGE_INTEGRATION = S3_INGEST_DATA_INTEGRATION;
+
+CREATE OR REPLACE STAGE DATA_PROVIDER_VOTER.RAW.PROVIDER_DATA_STAGE
+  URL = 's3://inferlytica-snowflake-provider-data-151562994023-us-east-1-an/uploads/'
+  STORAGE_INTEGRATION = S3_INGEST_DATA_INTEGRATION;
+
+  SHOW FILE FORMATS;
+
+LIST @CUSTOMER.FILE_PROCESSING.CLIENT_DATA_STAGE;
+
+CREATE OR REPLACE PIPE CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE
+  AUTO_INGEST = TRUE
+  AS
+  COPY INTO CUSTOMER.RAW.PERSON_INPUT
+  FROM @CUSTOMER.FILE_PROCESSING.CLIENT_DATA_STAGE
+  FILE_FORMAT = CUSTOMER.FILE_PROCESSING.CUSTOMER_RAW_FORMAT;
+
+DESC TABLE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH;
+SELECT *
+FROM CUSTOMER.RAW.PERSON_INPUT;
+
+  SHOW PIPES;
+  --arn:aws:sqs:us-east-1:004878718171:sf-snowpipe-AIDAQCIWLKTNUANPOWPIV-Ym7zU2p6AX2KU7RyzdJdDg
+SELECT SYSTEM$PIPE_STATUS('CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE');
+DESC PIPE CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE;
+
+USE DATABASE CUSTOMER;
+SELECT *
+FROM TABLE(
+  INFORMATION_SCHEMA.COPY_HISTORY(
+    TABLE_NAME => 'CUSTOMER.RAW.PERSON_INPUT',
+    START_TIME => DATEADD('hour', -2, CURRENT_TIMESTAMP())
+  )
+)
+ORDER BY LAST_LOAD_TIME DESC;
+
+--
+-- {
+-- 	"Version": "2012-10-17",
+-- 	"Statement": [
+-- 		{
+-- 			"Sid": "AllowBucketList",
+-- 			"Effect": "Allow",
+-- 			"Action": [
+-- 				"s3:GetBucketLocation",
+-- 				"s3:ListBucket"
+-- 			],
+-- 			"Resource": "arn:aws:s3:::inferlytica-snowflake-client-data"
+-- 		},
+-- 		{
+-- 			"Sid": "AllowObjectRead",
+-- 			"Effect": "Allow",
+-- 			"Action": [
+-- 				"s3:GetObject",
+-- 				"s3:GetObjectVersion"
+-- 			],
+-- 			"Resource": "arn:aws:s3:::inferlytica-snowflake-client-data/uploads/*"
+-- 		}
+-- 	]
+-- }
