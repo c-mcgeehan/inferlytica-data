@@ -32,3 +32,26 @@ FROM TABLE(
   )
 )
 ORDER BY LAST_LOAD_TIME DESC;
+
+--"lastReceivedMessageTimestamp":   2026-04-02 03:56:02.591 (receipt time of new file from AWS S3 Event)
+--process data loaded:              2026-04-02 03:56:02.885 (pipe has landed all data into raw.preprocessed input table)
+--client batch data loaded to raw:  2026-04-02 03:56:24.854 (CREATED_TS - when batch record inserts/created from task)
+--client batch processed:           2026-04-02 03:56:26.682 (after data is landed in raw - finished)
+
+--Analyzing the above:
+--After we receive our notification pipe takes less than half a second to move 100 records into preprocess table
+--After preprocess data landed, stream takes ~22 seconds to trigger task & create a batch from the data.SELECT
+--After batch is created it takes approximately ~2 seconds to load the data to raw and mark batch as processed (one delete happens after this to clear our preprocess)
+-- all in all: 30 seconds or less from file drop to data available in raw for 100 records
+-- next steps: 
+    -- refresh dynamic tables to get results avaialable (Data avaialable for modeling ts?)
+    -- execute delivery procedure for gender / age buckets predictions (data delivered ts?)
+
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH;
+
+
+SELECT *
+FROM CUSTOMER.RAW.PERSON_INPUT
+WHERE BATCH_ID = 301;
