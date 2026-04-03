@@ -28,6 +28,7 @@ REMOVE @CUSTOMER_NAMES;
 -- Refresh dynamic to pull data downstream
 alter dynamic table CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE refresh;
 
+
 -- SELECT name, database_name, schema_name, data_timestamp, state, state_code, state_message, refresh_trigger
 -- FROM SNOWFLAKE.ACCOUNT_USAGE.DYNAMIC_TABLE_REFRESH_HISTORY
 -- WHERE name = 'FIRST_NAME_GENDER_QUANTITY_YEAR'
