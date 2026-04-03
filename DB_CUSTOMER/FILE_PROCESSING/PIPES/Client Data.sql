@@ -25,7 +25,7 @@ DESC PIPE CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE;
 
 --1: 
 SELECT SYSTEM$PIPE_STATUS('CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE');
-{"executionState":"RUNNING","pendingFileCount":0,"lastIngestedTimestamp":"2026-04-02T11:47:19.581Z","lastIngestedFilePath":"client_0922cdb9-f46e-4b15-a511-a902d2c913b2/batch_41c0d8cd-6be4-432f-9689-19f0dae177a2/e02505e5-2db5-4ec3-a602-9fa8d46fb6df_555updated_sample.csv","notificationChannelName":"arn:aws:sqs:us-east-1:004878718171:sf-snowpipe-AIDAQCIWLKTNUANPOWPIV-Ym7zU2p6AX2KU7RyzdJdDg","numOutstandingMessagesOnChannel":1,"lastReceivedMessageTimestamp":"2026-04-02T11:47:19.166Z","lastForwardedMessageTimestamp":"2026-04-02T11:47:19.938Z","lastPulledFromChannelTimestamp":"2026-04-02T11:49:29.077Z","lastForwardedFilePath":"inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/client_0922cdb9-f46e-4b15-a511-a902d2c913b2/batch_41c0d8cd-6be4-432f-9689-19f0dae177a2/e02505e5-2db5-4ec3-a602-9fa8d46fb6df_555updated_sample.csv"}
+{"executionState":"RUNNING","pendingFileCount":0,"lastIngestedTimestamp":"2026-04-03T12:16:06.736Z","lastIngestedFilePath":"client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_4e872aba-4615-40dc-9f50-af4200d65ff3/c1d25c8f-327d-4182-b943-e500a89a969b_555updated_sample.csv","notificationChannelName":"arn:aws:sqs:us-east-1:004878718171:sf-snowpipe-AIDAQCIWLKTNUANPOWPIV-Ym7zU2p6AX2KU7RyzdJdDg","numOutstandingMessagesOnChannel":1,"lastReceivedMessageTimestamp":"2026-04-03T12:16:06.456Z","lastForwardedMessageTimestamp":"2026-04-03T12:16:07.119Z","lastPulledFromChannelTimestamp":"2026-04-03T12:17:26.432Z","lastForwardedFilePath":"inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_4e872aba-4615-40dc-9f50-af4200d65ff3/c1d25c8f-327d-4182-b943-e500a89a969b_555updated_sample.csv"};
 --1:
 SELECT *
 FROM TABLE(
@@ -36,7 +36,7 @@ FROM TABLE(
   )
 )
 ORDER BY LAST_LOAD_TIME DESC;
-
+--s3://inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/
 --2 (the time load_ts comes from preprocess pipe scan time):
 SELECT *
 FROM CUSTOMER.RAW.PERSON_INPUT;
@@ -47,6 +47,12 @@ FROM CUSTOMER.RAW.PERSON_INPUT_PREPROCESSED;
 --3 & 4:
 SELECT *
 FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH;
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.OUTPUT_GENDER_RESULTS
+ORDER BY PROCESSED_TS DESC;
+
+--dea20c807b67
 
 --1: "lastReceivedMessageTimestamp":   2026-04-02 03:56:02.591 (receipt time of new file from AWS S3 Event)
 --2: process data loaded:              2026-04-02 03:56:02.885 (pipe has landed all data into raw.preprocessed input table)
