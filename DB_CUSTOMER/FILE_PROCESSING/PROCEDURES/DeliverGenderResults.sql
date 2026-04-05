@@ -1,3 +1,10 @@
+SELECT * FROM  CUSTOMER.ANALYTICS.BATCH_GENDER_SUMMARY;
+
+--FIRST_NAME_MISSING_FLAG
+--SSA_IS_RARE_NAME
+--SSA_MALE_PROBABILITY
+--SSA_FEMALE_PROBABILITY
+
 CREATE OR REPLACE PROCEDURE CUSTOMER.FILE_PROCESSING.DELIVER_GENDER_RESULTS("MODEL_VERSION" VARCHAR DEFAULT 'v0.01')
 RETURNS VARCHAR
 LANGUAGE SQL
@@ -44,7 +51,11 @@ BEGIN
             SSA_MAX_PROBABILITY AS MAX_PROBABILITY,
             SSA_PROBABILITY_GAP AS PROBABILITY_GAP,
             :MODEL_VERSION AS MODEL_VERSION,
-            LOAD_TS AS PROCESSED_TS
+            LOAD_TS AS PROCESSED_TS,
+            FIRST_NAME_MISSING_FLAG,
+            SSA_IS_RARE_NAME AS IS_RARE_NAME_FLAG,
+            SSA_MALE_PROBABILITY AS MALE_PROBABILITY,
+            SSA_FEMALE_PROBABILITY AS FEMALE_PROBABILITY
         FROM BASELINE_TO_PROCESS
     ) src
     ON tgt.CLIENT_ID = src.CLIENT_ID
@@ -57,6 +68,10 @@ BEGIN
         tgt.MAX_PROBABILITY = src.MAX_PROBABILITY,
         tgt.PROBABILITY_GAP = src.PROBABILITY_GAP,
         tgt.MODEL_VERSION = src.MODEL_VERSION,
+        tgt.FIRST_NAME_MISSING_FLAG = src.FIRST_NAME_MISSING_FLAG.
+        tgt.IS_RARE_NAME_FLAG = src.IS_RARE_NAME_FLAG,
+        tgt.SSA_MALE_PROBABILITY = src.MALE_PROBABILITY,
+        tgt.SSA_FEMALE_PROBABILITY = src.FEMALE_PROBABILITY,
         tgt.PROCESSED_TS = src.PROCESSED_TS
     WHEN NOT MATCHED THEN INSERT (
         CLIENT_ID,
@@ -68,7 +83,11 @@ BEGIN
         MAX_PROBABILITY,
         PROBABILITY_GAP,
         MODEL_VERSION,
-        PROCESSED_TS
+        PROCESSED_TS,
+        FIRST_NAME_MISSING_FLAG,
+        IS_RARE_NAME_FLAG,
+        MALE_PROBABILITY,
+        FEMALE_PROBABILITY
     )
     VALUES (
         src.CLIENT_ID,
@@ -80,83 +99,174 @@ BEGIN
         src.MAX_PROBABILITY,
         src.PROBABILITY_GAP,
         src.MODEL_VERSION,
-        src.PROCESSED_TS
+        src.PROCESSED_TS,
+        src.FIRST_NAME_MISSING_FLAG,
+        src.IS_RARE_NAME_FLAG,
+        src.MALE_PROBABILITY,
+        src.FEMALE_PROBABILITY
     );
 
-    MERGE INTO CUSTOMER.ANALYTICS.BATCH_GENDER_SUMMARY tgt
+
+-- METRIC TO SUMMARY TABLE
+    MERGE INTO CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY tgt    
     USING (
-        SELECT
-            CLIENT_ID,
-            BATCH_ID,
-            :MODEL_VERSION AS MODEL_VERSION,
-            COUNT(*) AS TOTAL_RECORDS,
-            SUM(CASE WHEN FIRST_NAME_MISSING_FLAG = 0 THEN 1 ELSE 0 END) AS USABLE_FIRST_NAME_RECORDS,
-            SUM(CASE WHEN SSA_LOOKUP_MATCH_FLAG = 1 THEN 1 ELSE 0 END) AS SSA_LOOKUP_MATCH_RECORDS,
-            CASE
-                WHEN COUNT(*) = 0 THEN 0
-                ELSE SUM(CASE WHEN SSA_LOOKUP_MATCH_FLAG = 1 THEN 1 ELSE 0 END) / COUNT(*)
-            END AS SSA_LOOKUP_MATCH_RATE,
-            SUM(CASE WHEN SSA_CONFIDENCE_LEVEL = ''HIGH'' THEN 1 ELSE 0 END) AS HIGH_CONFIDENCE_RECORDS,
-            SUM(CASE WHEN SSA_CONFIDENCE_LEVEL = ''MEDIUM'' THEN 1 ELSE 0 END) AS MEDIUM_CONFIDENCE_RECORDS,
-            SUM(CASE WHEN SSA_CONFIDENCE_LEVEL = ''LOW'' THEN 1 ELSE 0 END) AS LOW_CONFIDENCE_RECORDS,
-            SUM(CASE WHEN SSA_CONFIDENCE_LEVEL = ''AMBIGUOUS'' THEN 1 ELSE 0 END) AS AMBIGUOUS_RECORDS,
-            SUM(CASE WHEN SSA_REPORTABLE_GENDER = ''M'' THEN 1 ELSE 0 END) AS REPORTABLE_M_RECORDS,
-            SUM(CASE WHEN SSA_REPORTABLE_GENDER = ''F'' THEN 1 ELSE 0 END) AS REPORTABLE_F_RECORDS,
-            SUM(CASE WHEN SSA_REPORTABLE_GENDER = ''U'' THEN 1 ELSE 0 END) AS REPORTABLE_U_RECORDS,
-            :BATCH_PROCESSED_TS AS PROCESSED_TS
-        FROM BASELINE_TO_PROCESS
-        GROUP BY
-            CLIENT_ID,
-            BATCH_ID
-    ) src
+         -- gender breakdown
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Gender'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                b.REPORTABLE_GENDER AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                b.REPORTABLE_GENDER
+            UNION ALL
+            -- all confidence levels, non-hardcoded
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Confidence Level'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                b.CONFIDENCE_LEVEL AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                b.CONFIDENCE_LEVEL
+            UNION ALL
+            -- rare-name confidence breakdown, non-hardcoded
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Uncommon Name Confidence Level'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                b.CONFIDENCE_LEVEL AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            WHERE b.IS_RARE_NAME_FLAG = 1
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                b.CONFIDENCE_LEVEL
+            UNION ALL
+             -- Rare name count
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Uncommon Names'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                ''TOTAL_UNCOMMON_NAMES'' AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            WHERE IS_RARE_NAME_FLAG = 1
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION
+            UNION ALL
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Total Records'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                ''TOTAL_RECORDS'' AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION
+            UNION ALL
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Missing First Name'' AS METRIC_NAME,
+                ''COUNT'' AS METRIC_TYPE,
+                ''MISSING_FIRST_NAME'' AS METRIC_LABEL,
+                COUNT(*) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            WHERE FIRST_NAME_MISSING_FLAG = 1
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION 
+            UNION ALL
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Average Max Probability'' AS METRIC_NAME,
+                ''AVERAGE'' AS METRIC_TYPE,
+                ''AVERAGE_MAX_PROBABILITY'' AS METRIC_LABEL,
+                AVG(b.MAX_PROBABILITY) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION
+            UNION ALL
+            SELECT
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION,
+                ''Average Probability Gap'' AS METRIC_NAME,
+                ''AVERAGE'' AS METRIC_TYPE,
+                ''AVERAGE_PROBABILITY_GAP'' AS METRIC_LABEL,
+                 AVG(b.PROBABILITY_GAP) AS METRIC_VALUE,
+                MAX(b.PROCESSED_TS) AS PROCESSED_TS
+            FROM BASE b
+            GROUP BY
+                b.CLIENT_ID,
+                b.BATCH_ID,
+                b.MODEL_VERSION
+    ) AS src
     ON tgt.CLIENT_ID = src.CLIENT_ID
-   AND tgt.BATCH_ID = src.BATCH_ID
+        AND tgt.BATCH_ID = src.BATCH_ID
+        AND tgt.MODEL_VERSION = src.MODEL_VERSION
+        AND tgt.METRIC_NAME = src.METRIC_NAME
+        AND tgt.METRIC_TYPE = src.METRIC_TYPE
+        AND tgt.METRIC_LABEL = src.METRIC_LABEL
     WHEN MATCHED THEN UPDATE SET
-        tgt.MODEL_VERSION = src.MODEL_VERSION,
-        tgt.TOTAL_RECORDS = src.TOTAL_RECORDS,
-        tgt.USABLE_FIRST_NAME_RECORDS = src.USABLE_FIRST_NAME_RECORDS,
-        tgt.SSA_LOOKUP_MATCH_RECORDS = src.SSA_LOOKUP_MATCH_RECORDS,
-        tgt.SSA_LOOKUP_MATCH_RATE = src.SSA_LOOKUP_MATCH_RATE,
-        tgt.HIGH_CONFIDENCE_RECORDS = src.HIGH_CONFIDENCE_RECORDS,
-        tgt.MEDIUM_CONFIDENCE_RECORDS = src.MEDIUM_CONFIDENCE_RECORDS,
-        tgt.LOW_CONFIDENCE_RECORDS = src.LOW_CONFIDENCE_RECORDS,
-        tgt.AMBIGUOUS_RECORDS = src.AMBIGUOUS_RECORDS,
-        tgt.REPORTABLE_M_RECORDS = src.REPORTABLE_M_RECORDS,
-        tgt.REPORTABLE_F_RECORDS = src.REPORTABLE_F_RECORDS,
-        tgt.REPORTABLE_U_RECORDS = src.REPORTABLE_U_RECORDS,
+        tgt.METRIC_VALUE = src.METRIC_VALUE,
         tgt.PROCESSED_TS = src.PROCESSED_TS
     WHEN NOT MATCHED THEN INSERT (
         CLIENT_ID,
         BATCH_ID,
         MODEL_VERSION,
-        TOTAL_RECORDS,
-        USABLE_FIRST_NAME_RECORDS,
-        SSA_LOOKUP_MATCH_RECORDS,
-        SSA_LOOKUP_MATCH_RATE,
-        HIGH_CONFIDENCE_RECORDS,
-        MEDIUM_CONFIDENCE_RECORDS,
-        LOW_CONFIDENCE_RECORDS,
-        AMBIGUOUS_RECORDS,
-        REPORTABLE_M_RECORDS,
-        REPORTABLE_F_RECORDS,
-        REPORTABLE_U_RECORDS,
+        METRIC_NAME,
+        METRIC_TYPE,
+        METRIC_VALUE,
+        METRIC_LABEL,
         PROCESSED_TS
     )
     VALUES (
         src.CLIENT_ID,
         src.BATCH_ID,
         src.MODEL_VERSION,
-        src.TOTAL_RECORDS,
-        src.USABLE_FIRST_NAME_RECORDS,
-        src.SSA_LOOKUP_MATCH_RECORDS,
-        src.SSA_LOOKUP_MATCH_RATE,
-        src.HIGH_CONFIDENCE_RECORDS,
-        src.MEDIUM_CONFIDENCE_RECORDS,
-        src.LOW_CONFIDENCE_RECORDS,
-        src.AMBIGUOUS_RECORDS,
-        src.REPORTABLE_M_RECORDS,
-        src.REPORTABLE_F_RECORDS,
-        src.REPORTABLE_U_RECORDS,
+        src.METRIC_NAME,
+        src.METRIC_TYPE,
+        src.METRIC_VALUE,
+        src.METRIC_LABEL,
         src.PROCESSED_TS
     );
 
@@ -237,6 +347,8 @@ BEGIN
         src.SSA_REPORTABLE_GENDER,
         src.MODEL_VERSION
     );
+
+   
 
     UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH cb
     SET DELIVERY_COMPLETE_TS = :BATCH_PROCESSED_TS
@@ -330,5 +442,126 @@ BEGIN
 END;
 ';
 
+DESC TABLE  CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE;
+
 SELECT *
 FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS;
+
+
+MERGE INTO CUSTOMER.ANALYTICS.BATCH_GENDER_SUMMARY_BREAKDOWN tgt
+USING (
+    WITH BASE AS (
+        SELECT
+            CLIENT_ID,
+            BATCH_ID,
+            MODEL_VERSION,
+            REPORTABLE_GENDER,
+            CONFIDENCE_LEVEL,
+            IS_RARE_NAME_FLAG
+        FROM CUSTOMER.FILE_PROCESSING.OUTPUT_GENDER_RESULTS
+    ),
+    TOTALS AS (
+        SELECT
+            CLIENT_ID,
+            BATCH_ID,
+            MODEL_VERSION,
+            COUNT(*) AS TOTAL_RECORDS
+        FROM BASE
+        GROUP BY CLIENT_ID, BATCH_ID, MODEL_VERSION
+    ),
+    BREAKDOWN_ROWS AS (
+
+        -- gender breakdown
+        SELECT
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            'REPORTABLE_GENDER' AS METRIC_TYPE,
+            b.REPORTABLE_GENDER AS METRIC_VALUE,
+            COUNT(*) AS RECORD_COUNT
+        FROM BASE b
+        GROUP BY
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            b.REPORTABLE_GENDER
+
+        UNION ALL
+
+        -- all confidence levels, non-hardcoded
+        SELECT
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            'CONFIDENCE_LEVEL' AS METRIC_TYPE,
+            b.CONFIDENCE_LEVEL AS METRIC_VALUE,
+            COUNT(*) AS RECORD_COUNT
+        FROM BASE b
+        GROUP BY
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            b.CONFIDENCE_LEVEL
+
+        UNION ALL
+
+        -- rare-name confidence breakdown, non-hardcoded
+        SELECT
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            'RARE_NAME_CONFIDENCE' AS METRIC_TYPE,
+            b.CONFIDENCE_LEVEL AS METRIC_VALUE,
+            COUNT(*) AS RECORD_COUNT
+        FROM BASE b
+        WHERE b.IS_RARE_NAME_FLAG = 1
+        GROUP BY
+            b.CLIENT_ID,
+            b.BATCH_ID,
+            b.MODEL_VERSION,
+            b.CONFIDENCE_LEVEL
+    )
+    SELECT
+        r.CLIENT_ID,
+        r.BATCH_ID,
+        r.MODEL_VERSION,
+        r.METRIC_TYPE,
+        r.METRIC_VALUE,
+        r.RECORD_COUNT,
+        r.RECORD_COUNT / NULLIF(t.TOTAL_RECORDS, 0) AS RECORD_RATE,
+        CURRENT_TIMESTAMP() AS PROCESSED_TS
+    FROM BREAKDOWN_ROWS r
+    INNER JOIN TOTALS t
+        ON r.CLIENT_ID = t.CLIENT_ID
+       AND r.BATCH_ID = t.BATCH_ID
+       AND r.MODEL_VERSION = t.MODEL_VERSION
+) src
+ON tgt.CLIENT_ID = src.CLIENT_ID
+AND tgt.BATCH_ID = src.BATCH_ID
+AND tgt.MODEL_VERSION = src.MODEL_VERSION
+AND tgt.METRIC_TYPE = src.METRIC_TYPE
+AND COALESCE(tgt.METRIC_VALUE, '') = COALESCE(src.METRIC_VALUE, '')
+WHEN MATCHED THEN UPDATE SET
+    tgt.RECORD_COUNT = src.RECORD_COUNT,
+    tgt.RECORD_RATE = src.RECORD_RATE,
+    tgt.PROCESSED_TS = src.PROCESSED_TS
+WHEN NOT MATCHED THEN INSERT (
+    CLIENT_ID,
+    BATCH_ID,
+    MODEL_VERSION,
+    METRIC_TYPE,
+    METRIC_VALUE,
+    RECORD_COUNT,
+    RECORD_RATE,
+    PROCESSED_TS
+)
+VALUES (
+    src.CLIENT_ID,
+    src.BATCH_ID,
+    src.MODEL_VERSION,
+    src.METRIC_TYPE,
+    src.METRIC_VALUE,
+    src.RECORD_COUNT,
+    src.RECORD_RATE,
+    src.PROCESSED_TS
+);
