@@ -25,3 +25,17 @@ DESC TASK CUSTOMER.FILE_PROCESSING.PROCESS_CLIENT_DATA_UPLOAD_TASK;
 --TARGET_COMPLETION_INTERVAL
 --SERVERLESS_TASK_MAX_STATEMENT_SIZE
 --USER_TASK_MINIMUM_TRIGGER_INTERVAL_IN_SECONDS
+
+SELECT *
+FROM TABLE(
+  CUSTOMER.INFORMATION_SCHEMA.TASK_HISTORY(
+    TASK_NAME => 'PROCESS_CLIENT_DATA_UPLOAD_TASK',
+    RESULT_LIMIT => 50
+  )
+)
+ORDER BY SCHEDULED_TIME DESC;
+
+--Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
+--Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
+invalid identifier 'TGT.SSA_MALE_PROBABILITY'
+invalid identifier 'TGT.SSA_MALE_PROBABILITY'
