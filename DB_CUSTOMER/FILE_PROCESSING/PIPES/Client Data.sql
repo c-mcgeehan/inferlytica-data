@@ -26,6 +26,8 @@ DESC PIPE CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE;
 --1: 
 SELECT SYSTEM$PIPE_STATUS('CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE');
 {"executionState":"RUNNING","pendingFileCount":0,"lastIngestedTimestamp":"2026-04-03T12:16:06.736Z","lastIngestedFilePath":"client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_4e872aba-4615-40dc-9f50-af4200d65ff3/c1d25c8f-327d-4182-b943-e500a89a969b_555updated_sample.csv","notificationChannelName":"arn:aws:sqs:us-east-1:004878718171:sf-snowpipe-AIDAQCIWLKTNUANPOWPIV-Ym7zU2p6AX2KU7RyzdJdDg","numOutstandingMessagesOnChannel":1,"lastReceivedMessageTimestamp":"2026-04-03T12:16:06.456Z","lastForwardedMessageTimestamp":"2026-04-03T12:16:07.119Z","lastPulledFromChannelTimestamp":"2026-04-03T12:17:26.432Z","lastForwardedFilePath":"inferlytica-snowflake-client-data-151562994023-us-east-1-an/uploads/client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_4e872aba-4615-40dc-9f50-af4200d65ff3/c1d25c8f-327d-4182-b943-e500a89a969b_555updated_sample.csv"};
+
+SELECT SYSTEM$PIPE_STATUS('CUSTOMER.FILE_PROCESSING.CLIENT_DATA_PIPE');
 --1:
 SELECT *
 FROM TABLE(

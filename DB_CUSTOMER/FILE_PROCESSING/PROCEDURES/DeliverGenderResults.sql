@@ -404,12 +404,12 @@ BEGIN
         SELECT
             p.CLIENT_ID,
             p.BATCH_ID,
-            cb.APP_FILE_ID,
+            cb.APP_BATCH_ID,
             c.APP_ORGANIZATION_ID,
             TO_JSON(
                 OBJECT_CONSTRUCT(
                     ''organization_id'', c.APP_ORGANIZATION_ID,
-                    ''batch_id'', cb.APP_FILE_ID,
+                    ''batch_id'', cb.APP_BATCH_ID,
                     ''delivery_status'', ''READY'',
                     ''delivery_status_updated_at'', CURRENT_TIMESTAMP(),
                     ''file_analysis'', COALESCE(ab.FILE_ANALYSIS, ARRAY_CONSTRUCT())
@@ -438,7 +438,7 @@ BEGIN
     AND tgt.EVENT_TYPE = src.EVENT_TYPE
     AND tgt.PROCESSED_TS IS NULL
     WHEN MATCHED THEN UPDATE SET
-        tgt.APP_FILE_ID = src.APP_FILE_ID,
+        tgt.APP_BATCH_ID = src.APP_BATCH_ID,
         tgt.APP_ORGANIZATION_ID = src.APP_ORGANIZATION_ID,
         tgt.PAYLOAD = src.PAYLOAD,
         tgt.STATUS = src.STATUS
@@ -446,7 +446,7 @@ BEGIN
     (
         CLIENT_ID,
         BATCH_ID,
-        APP_FILE_ID,
+        APP_BATCH_ID,
         APP_ORGANIZATION_ID,
         PAYLOAD,
         EVENT_TYPE,
@@ -461,7 +461,7 @@ BEGIN
     (
         src.CLIENT_ID,
         src.BATCH_ID,
-        src.APP_FILE_ID,
+        src.APP_BATCH_ID,
         src.APP_ORGANIZATION_ID,
         src.PAYLOAD,
         src.EVENT_TYPE,

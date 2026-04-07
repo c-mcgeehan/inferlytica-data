@@ -22,6 +22,9 @@ SET USER_TASK_MINIMUM_TRIGGER_INTERVAL_IN_SECONDS = 10;
 
 DESC TASK CUSTOMER.FILE_PROCESSING.PROCESS_CLIENT_DATA_UPLOAD_TASK;
 
+
+
+EXECUTE TASK CUSTOMER.FILE_PROCESSING.PROCESS_CLIENT_DATA_UPLOAD_TASK;
 --TARGET_COMPLETION_INTERVAL
 --SERVERLESS_TASK_MAX_STATEMENT_SIZE
 --USER_TASK_MINIMUM_TRIGGER_INTERVAL_IN_SECONDS
@@ -34,6 +37,8 @@ FROM TABLE(
   )
 )
 ORDER BY SCHEDULED_TIME DESC;
+
+CALL CUSTOMER.FILE_PROCESSING.PROCESS_CLIENT_FILE_TO_RAW();
 
 --Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
 --Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
