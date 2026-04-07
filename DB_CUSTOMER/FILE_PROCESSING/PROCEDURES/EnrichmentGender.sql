@@ -1,3 +1,5 @@
+CALL CUSTOMER.FILE_PROCESSING.ENRICH_WITH_GENDER();
+
 CREATE OR REPLACE PROCEDURE CUSTOMER.FILE_PROCESSING.ENRICH_WITH_GENDER("MODEL_VERSION" VARCHAR DEFAULT 'v0.01')
 RETURNS VARCHAR
 LANGUAGE SQL
@@ -9,6 +11,8 @@ DECLARE
      V_HAS_COMPLETED_BATCH BOOLEAN DEFAULT FALSE;
 BEGIN
 
+    ALTER DYNAMIC TABLE CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE REFRESH;
+
     CREATE OR REPLACE TEMP TABLE BATCHES_TO_PROCESS AS
     SELECT DISTINCT
         b.CLIENT_ID,
@@ -19,7 +23,7 @@ BEGIN
        AND b.BATCH_ID = cb.ID
     WHERE cb.DELIVERY_COMPLETE_TS IS NULL;
 
-    ALTER DYNAMIC TABLE CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE REFRESH;
+    
 
     SELECT COUNT(*) INTO :BATCH_COUNT
     FROM BATCHES_TO_PROCESS;
@@ -337,46 +341,51 @@ BEGIN
             ENRICHMENT_METRICS_PAYLOAD = src.ENRICHMENT_METRICS_PAYLOAD
         FROM (
             WITH METRIC_GROUPS AS (
-                SELECT
-                    CLIENT_ID,
-                    BATCH_ID,
-                    MODEL_VERSION,
-                    METRIC_NAME,
-                    ANY_VALUE(METRIC_TYPE) AS METRIC_TYPE,
-                    ANY_VALUE(METRIC_SORT) AS METRIC_SORT,
-                    ARRAY_AGG(
-                        OBJECT_CONSTRUCT(
-                            ''label'', METRIC_LABEL,
-                            ''value'', METRIC_VALUE
-                        )
-                    ) WITHIN GROUP (ORDER BY METRIC_LABEL) AS METRICS_ARRAY
-                FROM CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY
-                WHERE MODEL_VERSION = :MODEL_VERSION
-                GROUP BY
-                    CLIENT_ID,
-                    BATCH_ID,
-                    MODEL_VERSION,
-                    METRIC_NAME
-            )
             SELECT
                 CLIENT_ID,
                 BATCH_ID,
-                TO_JSON(
+                MODEL_VERSION,
+                METRIC_NAME,
+                ANY_VALUE(METRIC_TYPE) AS METRIC_TYPE,
+                ANY_VALUE(METRIC_DISPLAY_TYPE) AS METRIC_DISPLAY_TYPE,
+                ANY_VALUE(METRIC_LABEL_SORT) AS METRIC_LABEL_SORT,
+                ANY_VALUE(METRIC_SORT) AS METRIC_SORT,
+                ARRAY_AGG(
                     OBJECT_CONSTRUCT(
-                        ''analysis_type'', ''gender_metrics'',
-                        ''metrics'', ARRAY_AGG(
-                            OBJECT_CONSTRUCT(
-                                ''metric_name'', METRIC_NAME,
-                                ''metric_type'', METRIC_TYPE,
-                                ''metrics'', METRICS_ARRAY
-                            )
-                        ) WITHIN GROUP (ORDER BY METRIC_SORT, METRIC_NAME)
+                        ''label'', METRIC_LABEL,
+                        ''value'', METRIC_VALUE
                     )
-                ) AS ENRICHMENT_METRICS_PAYLOAD
-            FROM METRIC_GROUPS
+                ) WITHIN GROUP (ORDER BY METRIC_LABEL) AS METRICS_ARRAY
+            FROM CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY
+            WHERE MODEL_VERSION = :MODEL_VERSION
             GROUP BY
                 CLIENT_ID,
-                BATCH_ID
+                BATCH_ID,
+                MODEL_VERSION,
+                METRIC_NAME
+        )
+        SELECT
+            CLIENT_ID,
+            BATCH_ID,
+            TO_JSON(
+                OBJECT_CONSTRUCT(
+                    ''analysis_type'', ''gender_metrics'',
+                    ''metrics'', ARRAY_AGG(
+                        OBJECT_CONSTRUCT(
+                            ''metric_name'', METRIC_NAME,
+                            ''metric_type'', METRIC_TYPE,
+                            ''metric_display_type'', METRIC_DISPLAY_TYPE,
+                            ''metric_label_sort'', METRIC_LABEL_SORT,
+                            ''metric_sort'', METRIC_SORT,
+                            ''metrics'', METRICS_ARRAY
+                        )
+                    ) WITHIN GROUP (ORDER BY METRIC_SORT, METRIC_NAME)
+                )
+            ) AS ENRICHMENT_METRICS_PAYLOAD
+        FROM METRIC_GROUPS
+        GROUP BY
+            CLIENT_ID,
+            BATCH_ID
         ) src
         WHERE s.CLIENT_ID = src.CLIENT_ID
           AND s.BATCH_ID = src.BATCH_ID
