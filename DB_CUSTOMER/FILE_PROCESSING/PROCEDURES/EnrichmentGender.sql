@@ -6,6 +6,7 @@ AS '
 DECLARE
     BATCH_PROCESSED_TS TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP();
     BATCH_COUNT NUMBER DEFAULT 0;
+     V_HAS_COMPLETED_BATCH BOOLEAN DEFAULT FALSE;
 BEGIN
 
     CREATE OR REPLACE TEMP TABLE BATCHES_TO_PROCESS AS
@@ -17,6 +18,8 @@ BEGIN
         ON b.CLIENT_ID = cb.CLIENT_ID
        AND b.BATCH_ID = cb.ID
     WHERE cb.DELIVERY_COMPLETE_TS IS NULL;
+
+    ALTER DYNAMIC TABLE CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE REFRESH;
 
     SELECT COUNT(*) INTO :BATCH_COUNT
     FROM BATCHES_TO_PROCESS;
@@ -325,149 +328,101 @@ BEGIN
         src.MODEL_VERSION
     );
 
-   
-
-    UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH cb
-    SET DELIVERY_COMPLETE_TS = :BATCH_PROCESSED_TS
-    WHERE EXISTS (
-        SELECT 1
-        FROM BATCHES_TO_PROCESS p
-        WHERE p.CLIENT_ID = cb.CLIENT_ID
-          AND p.BATCH_ID = cb.ID
-    );
-
-  MERGE INTO CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS tgt
-    USING (
-        WITH METRIC_GROUPS AS (
+        UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS s
+        SET
+            ENRICHMENT_STATUS = ''COMPLETED'',
+            COMPLETED_TS = :BATCH_PROCESSED_TS,
+            UPDATED_TS = :BATCH_PROCESSED_TS,
+            ERROR_MESSAGE = NULL,
+            ENRICHMENT_METRICS_PAYLOAD = src.ENRICHMENT_METRICS_PAYLOAD
+        FROM (
+            WITH METRIC_GROUPS AS (
+                SELECT
+                    CLIENT_ID,
+                    BATCH_ID,
+                    MODEL_VERSION,
+                    METRIC_NAME,
+                    ANY_VALUE(METRIC_TYPE) AS METRIC_TYPE,
+                    ANY_VALUE(METRIC_SORT) AS METRIC_SORT,
+                    ARRAY_AGG(
+                        OBJECT_CONSTRUCT(
+                            ''label'', METRIC_LABEL,
+                            ''value'', METRIC_VALUE
+                        )
+                    ) WITHIN GROUP (ORDER BY METRIC_LABEL) AS METRICS_ARRAY
+                FROM CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY
+                WHERE MODEL_VERSION = :MODEL_VERSION
+                GROUP BY
+                    CLIENT_ID,
+                    BATCH_ID,
+                    MODEL_VERSION,
+                    METRIC_NAME
+            )
             SELECT
                 CLIENT_ID,
                 BATCH_ID,
-                MODEL_VERSION,
-                METRIC_NAME,
-                ANY_VALUE(METRIC_TYPE) AS METRIC_TYPE,
-                ANY_VALUE(METRIC_DISPLAY_TYPE) AS METRIC_DISPLAY_TYPE,
-                ANY_VALUE(METRIC_LABEL_SORT) AS METRIC_LABEL_SORT,
-                ANY_VALUE(METRIC_SORT) AS METRIC_SORT,
-                ARRAY_AGG(
-                    OBJECT_CONSTRUCT(
-                        ''label'', METRIC_LABEL,
-                        ''value'', METRIC_VALUE
-                    )
-                ) WITHIN GROUP (ORDER BY METRIC_LABEL) AS METRICS_ARRAY
-            FROM CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY
-            GROUP BY
-                CLIENT_ID,
-                BATCH_ID,
-                MODEL_VERSION,
-                METRIC_NAME
-        ),
-        ANALYSIS_BLOCKS AS (
-            SELECT
-                CLIENT_ID,
-                BATCH_ID,
-                MODEL_VERSION,
-                ARRAY_CONSTRUCT(
+                TO_JSON(
                     OBJECT_CONSTRUCT(
                         ''analysis_type'', ''gender_metrics'',
                         ''metrics'', ARRAY_AGG(
                             OBJECT_CONSTRUCT(
                                 ''metric_name'', METRIC_NAME,
                                 ''metric_type'', METRIC_TYPE,
-                                ''metric_display_type'', METRIC_DISPLAY_TYPE,
-                                ''metric_label_sort'', METRIC_LABEL_SORT,
-                                ''metric_sort'', METRIC_SORT,
                                 ''metrics'', METRICS_ARRAY
                             )
                         ) WITHIN GROUP (ORDER BY METRIC_SORT, METRIC_NAME)
                     )
-                ) AS FILE_ANALYSIS
+                ) AS ENRICHMENT_METRICS_PAYLOAD
             FROM METRIC_GROUPS
             GROUP BY
                 CLIENT_ID,
-                BATCH_ID,
-                MODEL_VERSION
-        )
-        SELECT
+                BATCH_ID
+        ) src
+        WHERE s.CLIENT_ID = src.CLIENT_ID
+          AND s.BATCH_ID = src.BATCH_ID
+          AND s.ENRICHMENT_TYPE_CODE = ''GNDRPR''
+          AND EXISTS (
+              SELECT 1
+              FROM BATCHES_TO_PROCESS p
+              WHERE p.CLIENT_ID = s.CLIENT_ID
+                AND p.BATCH_ID = s.BATCH_ID
+          );
+
+   -- If there are completed record add them to the queue
+   MERGE INTO CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_COMPLETION_QUEUE tgt
+    USING (
+        SELECT DISTINCT
             p.CLIENT_ID,
             p.BATCH_ID,
-            cb.APP_FILE_ID,
-            c.APP_ORGANIZATION_ID,
-            TO_JSON(
-                OBJECT_CONSTRUCT(
-                    ''organization_id'', c.APP_ORGANIZATION_ID,
-                    ''batch_id'', cb.APP_FILE_ID,
-                    ''delivery_status'', ''READY'',
-                    ''delivery_status_updated_at'', CURRENT_TIMESTAMP(),
-                    ''file_analysis'', COALESCE(ab.FILE_ANALYSIS, ARRAY_CONSTRUCT())
-                )
-            ) AS PAYLOAD,
-            ''DELIVERY_STATUS_UPDATED'' AS EVENT_TYPE,
-            ''READY'' AS STATUS,
-            0 AS ATTEMPT_COUNT,
-            NULL AS LAST_ATTEMPT_TS,
-            NULL AS LAST_ERROR,
-            CURRENT_TIMESTAMP() AS CREATED_TS,
-            NULL AS PROCESSED_TS
+            CURRENT_TIMESTAMP() AS QUEUED_TS
         FROM BATCHES_TO_PROCESS p
-        INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH cb
-            ON p.CLIENT_ID = cb.CLIENT_ID
-           AND p.BATCH_ID = cb.ID
-        INNER JOIN CUSTOMER.MANAGEMENT.CLIENT c
-            ON p.CLIENT_ID = c.ID
-        LEFT JOIN ANALYSIS_BLOCKS ab
-            ON p.CLIENT_ID = ab.CLIENT_ID
-           AND p.BATCH_ID = ab.BATCH_ID
-           AND ab.MODEL_VERSION = :MODEL_VERSION
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS s
+            WHERE s.CLIENT_ID = p.CLIENT_ID
+              AND s.BATCH_ID = p.BATCH_ID
+              AND s.ENRICHMENT_STATUS <> ''COMPLETED''
+        )
     ) src
     ON tgt.CLIENT_ID = src.CLIENT_ID
     AND tgt.BATCH_ID = src.BATCH_ID
-    AND tgt.EVENT_TYPE = src.EVENT_TYPE
-    AND tgt.PROCESSED_TS IS NULL
-    WHEN MATCHED THEN UPDATE SET
-        tgt.APP_FILE_ID = src.APP_FILE_ID,
-        tgt.APP_ORGANIZATION_ID = src.APP_ORGANIZATION_ID,
-        tgt.PAYLOAD = src.PAYLOAD,
-        tgt.STATUS = src.STATUS
-    WHEN NOT MATCHED THEN INSERT
-    (
+    WHEN NOT MATCHED THEN INSERT (
         CLIENT_ID,
         BATCH_ID,
-        APP_FILE_ID,
-        APP_ORGANIZATION_ID,
-        PAYLOAD,
-        EVENT_TYPE,
-        STATUS,
-        ATTEMPT_COUNT,
-        LAST_ATTEMPT_TS,
-        LAST_ERROR,
+        QUEUED_TS,
+        PROCESSING_STATUS,
         CREATED_TS,
-        PROCESSED_TS
+        UPDATED_TS
     )
-    VALUES
-    (
+    VALUES (
         src.CLIENT_ID,
         src.BATCH_ID,
-        src.APP_FILE_ID,
-        src.APP_ORGANIZATION_ID,
-        src.PAYLOAD,
-        src.EVENT_TYPE,
-        src.STATUS,
-        src.ATTEMPT_COUNT,
-        src.LAST_ATTEMPT_TS,
-        src.LAST_ERROR,
-        src.CREATED_TS,
-        src.PROCESSED_TS
+        src.QUEUED_TS,
+        ''PENDING'',
+        src.QUEUED_TS,
+        src.QUEUED_TS
     );
-
-    DELETE FROM CUSTOMER.RAW.PERSON_INPUT r
-    WHERE EXISTS (
-        SELECT 1
-        FROM BATCHES_TO_PROCESS p
-        WHERE p.CLIENT_ID = r.CLIENT_ID
-          AND p.BATCH_ID = r.BATCH_ID
-    );
-
-    ALTER DYNAMIC TABLE CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE REFRESH;
+    
 
     RETURN ''SUCCESS - PROCESSED '' || :BATCH_COUNT || '' BATCH(ES)'';
 END;
