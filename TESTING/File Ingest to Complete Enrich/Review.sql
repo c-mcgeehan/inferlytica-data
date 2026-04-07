@@ -25,6 +25,7 @@ FROM TABLE(
   )
 )
 ORDER BY SCHEDULED_TIME DESC;
+--Uncaught exception of type 'STATEMENT_ERROR' on line 89 at position 4 : DML operation to table CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS failed on column APP_BATCH_ID with error: Numeric value '60b2ddf1-7d43-4313-b98a-f90685478fc7' is not recognized
 --Uncaught exception of type 'STATEMENT_ERROR' on line 36 at position 4 : SQL compilation error: error line 16 at position 11
 --invalid identifier 'B.APP_BATCH_ID'
 --Check task proc
@@ -34,6 +35,7 @@ SELECT *
 FROM CUSTOMER.RAW.PERSON_INPUT_PREPROCESSED;
 --uploads/client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_8ba86a47-2574-4aab-8ecb-89026eb8e72c/2e98271d-b842-4952-999f-2ec5362c88ce_10if_test_updated_sample.csv
 --uploads/client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_2fad89d6-4479-4cb4-848c-cb6786399394/e161db21-1455-44ba-a27f-14dc83424d18_13if_test_updated_sample.csv
+--uploads/client_1d96f728-bdc7-4554-8167-89cbd072b075/batch_60b2ddf1-7d43-4313-b98a-f90685478fc7/db881f2c-706f-4bcb-9747-e1b502fb5c35_14if_test_updated_sample.csv
 --Check next step incase it was cleared
 
 --Does file name exist?
@@ -52,7 +54,7 @@ FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS;
 --data in raw input
 SELECT *
 FROM CUSTOMER.RAW.PERSON_INPUT
-WHERE BATCH_ID = 1701;
+WHERE BATCH_ID = 1801;
 --yes
 
 SELECT *
