@@ -124,8 +124,11 @@ BEGIN
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Gender'' AS METRIC_NAME,
                 ''COUNT'' AS METRIC_TYPE,
+                ''INTEGER'' AS METRIC_DISPLAY_TYPE,
                 b.SSA_REPORTABLE_GENDER AS METRIC_LABEL,
                 COUNT(*) AS METRIC_VALUE,
+                ''VALUE'' AS METRIC_LABEL_SORT,
+                1 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
@@ -140,24 +143,11 @@ BEGIN
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Confidence Level'' AS METRIC_NAME,
                 ''COUNT'' AS METRIC_TYPE,
+                ''INTEGER'' AS METRIC_DISPLAY_TYPE,
                 b.SSA_CONFIDENCE_LEVEL AS METRIC_LABEL,
                 COUNT(*) AS METRIC_VALUE,
-                MAX(b.LOAD_TS) AS PROCESSED_TS
-            FROM BASELINE_TO_PROCESS b
-            GROUP BY
-                b.CLIENT_ID,
-                b.BATCH_ID,
-                b.SSA_CONFIDENCE_LEVEL
-            UNION ALL
-            -- rare-name confidence breakdown, non-hardcoded
-            SELECT
-                b.CLIENT_ID,
-                b.BATCH_ID,
-                :MODEL_VERSION AS MODEL_VERSION,
-                ''Uncommon Name Confidence Level'' AS METRIC_NAME,
-                ''COUNT'' AS METRIC_TYPE,
-                b.SSA_CONFIDENCE_LEVEL AS METRIC_LABEL,
-                COUNT_IF(b.SSA_IS_RARE_NAME = 1) AS METRIC_VALUE,
+                ''CONFIDENCE'' AS METRIC_LABEL_SORT,
+                2 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
@@ -172,37 +162,29 @@ BEGIN
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Uncommon Names'' AS METRIC_NAME,
                 ''COUNT'' AS METRIC_TYPE,
+                ''INTEGER'' AS METRIC_DISPLAY_TYPE,
                 ''TOTAL_UNCOMMON_NAMES'' AS METRIC_LABEL,
                 COUNT_IF(SSA_IS_RARE_NAME = 1) AS METRIC_VALUE,
+                NULL AS METRIC_LABEL_SORT,
+                3 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
                 b.CLIENT_ID,
                 b.BATCH_ID
             UNION ALL
-            --total file records
-            SELECT
-                b.CLIENT_ID,
-                b.BATCH_ID,
-                :MODEL_VERSION AS MODEL_VERSION,
-                ''Total Records'' AS METRIC_NAME,
-                ''COUNT'' AS METRIC_TYPE,
-                ''TOTAL_RECORDS'' AS METRIC_LABEL,
-                COUNT(*) AS METRIC_VALUE,
-                MAX(b.LOAD_TS) AS PROCESSED_TS
-            FROM BASELINE_TO_PROCESS b
-            GROUP BY
-                b.CLIENT_ID,
-                b.BATCH_ID
-            UNION ALL
+            --Missing first name
             SELECT
                 b.CLIENT_ID,
                 b.BATCH_ID,
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Missing First Name'' AS METRIC_NAME,
                 ''COUNT'' AS METRIC_TYPE,
+                ''INTEGER'' AS METRIC_DISPLAY_TYPE,
                 ''MISSING_FIRST_NAME'' AS METRIC_LABEL,
                 COUNT_IF(FIRST_NAME_MISSING_FLAG = 1) AS METRIC_VALUE,
+                NULL AS METRIC_LABEL_SORT,
+                4 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
@@ -215,8 +197,11 @@ BEGIN
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Average Max Probability'' AS METRIC_NAME,
                 ''AVERAGE'' AS METRIC_TYPE,
+                ''PERCENT'' AS METRIC_DISPLAY_TYPE,
                 ''AVERAGE_MAX_PROBABILITY'' AS METRIC_LABEL,
                 AVG(b.SSA_MAX_PROBABILITY) AS METRIC_VALUE,
+                NULL AS METRIC_LABEL_SORT,
+                5 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
@@ -229,8 +214,11 @@ BEGIN
                 :MODEL_VERSION AS MODEL_VERSION,
                 ''Average Probability Gap'' AS METRIC_NAME,
                 ''AVERAGE'' AS METRIC_TYPE,
+                ''PERCENT'' AS METRIC_DISPLAY_TYPE,
                 ''AVERAGE_PROBABILITY_GAP'' AS METRIC_LABEL,
                  AVG(b.SSA_PROBABILITY_GAP) AS METRIC_VALUE,
+                 NULL AS METRIC_LABEL_SORT,
+                 6 AS METRIC_SORT,
                 MAX(b.LOAD_TS) AS PROCESSED_TS
             FROM BASELINE_TO_PROCESS b
             GROUP BY
@@ -254,6 +242,9 @@ BEGIN
         METRIC_TYPE,
         METRIC_VALUE,
         METRIC_LABEL,
+        METRIC_DISPLAY_TYPE,
+        METRIC_LABEL_SORT,
+        METRIC_SORT,
         PROCESSED_TS
     )
     VALUES (
@@ -264,6 +255,9 @@ BEGIN
         src.METRIC_TYPE,
         src.METRIC_VALUE,
         src.METRIC_LABEL,
+        src.METRIC_DISPLAY_TYPE,
+        src.METRIC_LABEL_SORT,
+        src.METRIC_SORT,
         src.PROCESSED_TS
     );
 
@@ -356,8 +350,57 @@ BEGIN
           AND p.BATCH_ID = cb.ID
     );
 
-    MERGE INTO CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS tgt
+  MERGE INTO CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS tgt
     USING (
+        WITH METRIC_GROUPS AS (
+            SELECT
+                CLIENT_ID,
+                BATCH_ID,
+                MODEL_VERSION,
+                METRIC_NAME,
+                ANY_VALUE(METRIC_TYPE) AS METRIC_TYPE,
+                ANY_VALUE(METRIC_DISPLAY_TYPE) AS METRIC_DISPLAY_TYPE,
+                ANY_VALUE(METRIC_LABEL_SORT) AS METRIC_LABEL_SORT,
+                ANY_VALUE(METRIC_SORT) AS METRIC_SORT,
+                ARRAY_AGG(
+                    OBJECT_CONSTRUCT(
+                        ''label'', METRIC_LABEL,
+                        ''value'', METRIC_VALUE
+                    )
+                ) WITHIN GROUP (ORDER BY METRIC_LABEL) AS METRICS_ARRAY
+            FROM CUSTOMER.FILE_PROCESSING.GENDER_RESULTS_BATCH_SUMMARY
+            GROUP BY
+                CLIENT_ID,
+                BATCH_ID,
+                MODEL_VERSION,
+                METRIC_NAME
+        ),
+        ANALYSIS_BLOCKS AS (
+            SELECT
+                CLIENT_ID,
+                BATCH_ID,
+                MODEL_VERSION,
+                ARRAY_CONSTRUCT(
+                    OBJECT_CONSTRUCT(
+                        ''analysis_type'', ''gender_metrics'',
+                        ''metrics'', ARRAY_AGG(
+                            OBJECT_CONSTRUCT(
+                                ''metric_name'', METRIC_NAME,
+                                ''metric_type'', METRIC_TYPE,
+                                ''metric_display_type'', METRIC_DISPLAY_TYPE,
+                                ''metric_label_sort'', METRIC_LABEL_SORT,
+                                ''metric_sort'', METRIC_SORT,
+                                ''metrics'', METRICS_ARRAY
+                            )
+                        ) WITHIN GROUP (ORDER BY METRIC_SORT, METRIC_NAME)
+                    )
+                ) AS FILE_ANALYSIS
+            FROM METRIC_GROUPS
+            GROUP BY
+                CLIENT_ID,
+                BATCH_ID,
+                MODEL_VERSION
+        )
         SELECT
             p.CLIENT_ID,
             p.BATCH_ID,
@@ -368,7 +411,8 @@ BEGIN
                     ''organization_id'', c.APP_ORGANIZATION_ID,
                     ''batch_id'', cb.APP_FILE_ID,
                     ''delivery_status'', ''READY'',
-                    ''delivery_status_updated_at'', CURRENT_TIMESTAMP()
+                    ''delivery_status_updated_at'', CURRENT_TIMESTAMP(),
+                    ''file_analysis'', COALESCE(ab.FILE_ANALYSIS, ARRAY_CONSTRUCT())
                 )
             ) AS PAYLOAD,
             ''DELIVERY_STATUS_UPDATED'' AS EVENT_TYPE,
@@ -384,6 +428,10 @@ BEGIN
            AND p.BATCH_ID = cb.ID
         INNER JOIN CUSTOMER.MANAGEMENT.CLIENT c
             ON p.CLIENT_ID = c.ID
+        LEFT JOIN ANALYSIS_BLOCKS ab
+            ON p.CLIENT_ID = ab.CLIENT_ID
+           AND p.BATCH_ID = ab.BATCH_ID
+           AND ab.MODEL_VERSION = :MODEL_VERSION
     ) src
     ON tgt.CLIENT_ID = src.CLIENT_ID
     AND tgt.BATCH_ID = src.BATCH_ID
@@ -444,121 +492,5 @@ DESC TABLE  CUSTOMER.ANALYTICS.PERSON_INPUT_GENDER_BASELINE;
 SELECT *
 FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS;
 
-
-MERGE INTO CUSTOMER.ANALYTICS.BATCH_GENDER_SUMMARY_BREAKDOWN tgt
-USING (
-    WITH BASE AS (
-        SELECT
-            CLIENT_ID,
-            BATCH_ID,
-            MODEL_VERSION,
-            REPORTABLE_GENDER,
-            CONFIDENCE_LEVEL,
-            IS_RARE_NAME_FLAG
-        FROM CUSTOMER.FILE_PROCESSING.OUTPUT_GENDER_RESULTS
-    ),
-    TOTALS AS (
-        SELECT
-            CLIENT_ID,
-            BATCH_ID,
-            MODEL_VERSION,
-            COUNT(*) AS TOTAL_RECORDS
-        FROM BASE
-        GROUP BY CLIENT_ID, BATCH_ID, MODEL_VERSION
-    ),
-    BREAKDOWN_ROWS AS (
-
-        -- gender breakdown
-        SELECT
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            'REPORTABLE_GENDER' AS METRIC_TYPE,
-            b.REPORTABLE_GENDER AS METRIC_VALUE,
-            COUNT(*) AS RECORD_COUNT
-        FROM BASE b
-        GROUP BY
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            b.REPORTABLE_GENDER
-
-        UNION ALL
-
-        -- all confidence levels, non-hardcoded
-        SELECT
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            'CONFIDENCE_LEVEL' AS METRIC_TYPE,
-            b.CONFIDENCE_LEVEL AS METRIC_VALUE,
-            COUNT(*) AS RECORD_COUNT
-        FROM BASE b
-        GROUP BY
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            b.CONFIDENCE_LEVEL
-
-        UNION ALL
-
-        -- rare-name confidence breakdown, non-hardcoded
-        SELECT
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            'RARE_NAME_CONFIDENCE' AS METRIC_TYPE,
-            b.CONFIDENCE_LEVEL AS METRIC_VALUE,
-            COUNT(*) AS RECORD_COUNT
-        FROM BASE b
-        WHERE b.IS_RARE_NAME_FLAG = 1
-        GROUP BY
-            b.CLIENT_ID,
-            b.BATCH_ID,
-            b.MODEL_VERSION,
-            b.CONFIDENCE_LEVEL
-    )
-    SELECT
-        r.CLIENT_ID,
-        r.BATCH_ID,
-        r.MODEL_VERSION,
-        r.METRIC_TYPE,
-        r.METRIC_VALUE,
-        r.RECORD_COUNT,
-        r.RECORD_COUNT / NULLIF(t.TOTAL_RECORDS, 0) AS RECORD_RATE,
-        CURRENT_TIMESTAMP() AS PROCESSED_TS
-    FROM BREAKDOWN_ROWS r
-    INNER JOIN TOTALS t
-        ON r.CLIENT_ID = t.CLIENT_ID
-       AND r.BATCH_ID = t.BATCH_ID
-       AND r.MODEL_VERSION = t.MODEL_VERSION
-) src
-ON tgt.CLIENT_ID = src.CLIENT_ID
-AND tgt.BATCH_ID = src.BATCH_ID
-AND tgt.MODEL_VERSION = src.MODEL_VERSION
-AND tgt.METRIC_TYPE = src.METRIC_TYPE
-AND COALESCE(tgt.METRIC_VALUE, '') = COALESCE(src.METRIC_VALUE, '')
-WHEN MATCHED THEN UPDATE SET
-    tgt.RECORD_COUNT = src.RECORD_COUNT,
-    tgt.RECORD_RATE = src.RECORD_RATE,
-    tgt.PROCESSED_TS = src.PROCESSED_TS
-WHEN NOT MATCHED THEN INSERT (
-    CLIENT_ID,
-    BATCH_ID,
-    MODEL_VERSION,
-    METRIC_TYPE,
-    METRIC_VALUE,
-    RECORD_COUNT,
-    RECORD_RATE,
-    PROCESSED_TS
-)
-VALUES (
-    src.CLIENT_ID,
-    src.BATCH_ID,
-    src.MODEL_VERSION,
-    src.METRIC_TYPE,
-    src.METRIC_VALUE,
-    src.RECORD_COUNT,
-    src.RECORD_RATE,
-    src.PROCESSED_TS
-);
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.OUTPUT_GENDER_RESULTS;
