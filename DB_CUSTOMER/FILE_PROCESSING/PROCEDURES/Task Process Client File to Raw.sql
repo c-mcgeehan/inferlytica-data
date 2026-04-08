@@ -96,7 +96,42 @@ BEGIN
           AND R.RECORD_ID = T.RECORD_ID
     );
 
-    --Update batch with record count 
+    MERGE INTO CUSTOMER.FILE_PROCESSING.CREDIT_APPROVAL_QUEUE TGT
+        USING (
+            SELECT
+                T.APP_ORGANIZATION_ID,
+                T.APP_BATCH_ID,
+                B.ID AS BATCH_ID,
+                'PENDING' AS STATUS
+            FROM TMP_PERSON_INPUT_STREAM T
+            INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH B
+                ON B.APP_BATCH_ID = T.APP_BATCH_ID
+            GROUP BY
+                T.APP_ORGANIZATION_ID,
+                T.APP_BATCH_ID,
+                B.ID
+        ) SRC
+            ON TGT.APP_ORGANIZATION_ID = SRC.APP_ORGANIZATION_ID
+           AND TGT.APP_BATCH_ID = SRC.APP_BATCH_ID
+        WHEN NOT MATCHED THEN
+            INSERT (
+                APP_ORGANIZATION_ID,
+                APP_BATCH_ID,
+                BATCH_ID,
+                STATUS
+            )
+            VALUES (
+                SRC.APP_ORGANIZATION_ID,
+                SRC.APP_BATCH_ID,
+                SRC.BATCH_ID,
+                SRC.STATUS
+            );
+   
+    
+    RETURN 'Processed ' || (SELECT COUNT(*) FROM TMP_PERSON_INPUT_STREAM) || ' stream rows.';
+END;
+$$;
+ --Update batch with record count 
     
     --Insert into queue table with app org id, app batch id, our batch id
     --queue posts updates to supabase array of batches for approval with their record count, app_batch_id, app_org_id, supabase updated credits_expected, and records count for each file
@@ -107,10 +142,6 @@ BEGIN
     -- enrichment completes, in addition to analysis ready, we should also provide record counts to supabase.
     -- processed record count updated in supabase, credits consumed updated to match processed record count, and credits reserved for record reset to null. (should reflect credit changes in UI here, might go up a little since processed could be less than reserved)
     
-    
-    RETURN 'Processed ' || (SELECT COUNT(*) FROM TMP_PERSON_INPUT_STREAM) || ' stream rows.';
-END;
-$$;
 
 
 SELECT *
