@@ -11,15 +11,13 @@ AS
 $$
 import json
 import requests
-import _snowflake
 from snowflake.snowpark.secrets import get_generic_secret_string
 
 def main(session):
-
     token = get_generic_secret_string("webhook_secret")
-    # Pull pending approvals from the stream.
-    # Aggregate by org + app batch in case the stream contains multiple change rows.
-    sql = """
+
+
+    rows = session.sql("""
         SELECT
             Q.APP_ORGANIZATION_ID AS ORGANIZATION_ID,
             Q.APP_BATCH_ID AS BATCH_ID,
@@ -28,14 +26,18 @@ def main(session):
         FROM CUSTOMER.MANAGEMENT.CREDIT_APPROVAL_QUEUE_STREAM Q
         INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH B
             ON B.APP_BATCH_ID = Q.APP_BATCH_ID
-        WHERE Q.STATUS = 'PENDING' --this is inserted as pending and its an append only stream so don't need this most likely
+        WHERE Q.STATUS = 'PENDING'
         GROUP BY
             Q.APP_ORGANIZATION_ID,
             Q.APP_BATCH_ID,
             Q.CREATED_TS
-    """
-    
-    rows = session.sql(sql).collect()
+    """).collect()
+
+    session.sql("""
+        INSERT INTO CUSTOMER.MANAGEMENT.STREAM_DUMP
+        SELECT 'DUMP'
+        FROM CUSTOMER.MANAGEMENT.CREDIT_APPROVAL_QUEUE_STREAM
+    """).collect()
 
     if not rows:
         return 'No pending approval requests found in stream.'
@@ -50,16 +52,11 @@ def main(session):
         for row in rows
     ]
 
-    # Secret retrieval from Snowflake secret object.
-    secret_value = _snowflake.get_generic_secret_string('webhook_secret')
-
-    # Replace with your actual Supabase Edge Function URL.
     url = 'https://agslmpzenhwusxizgpfe.supabase.co/functions/v1/batch-approval-request'
 
     headers = {
-        'Content-Type': 'application/json',
-        "Authorization": f"Bearer {token}",
-        'x-webhook-secret': secret_value
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
     }
 
     response = requests.post(
