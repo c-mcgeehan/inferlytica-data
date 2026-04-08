@@ -96,64 +96,17 @@ BEGIN
           AND R.RECORD_ID = T.RECORD_ID
     );
 
+    --Update batch with record count 
     
-    -- THESE RECORDS TRIGGER ENRICHMENT
-    INSERT INTO CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS (
-        CLIENT_ID,
-        BATCH_ID,
-        APP_BATCH_ID,
-        ENRICHMENT_TYPE,
-        ENRICHMENT_TYPE_CODE,
-        ENRICHMENT_STATUS
-    )
-    SELECT DISTINCT
-        B.CLIENT_ID,
-        B.ID AS BATCH_ID,
-        T.APP_BATCH_ID AS APP_BATCH_ID,
-        A.VALUE:label::VARCHAR AS ENRICHMENT_TYPE,
-        A.VALUE:code::VARCHAR AS ENRICHMENT_TYPE_CODE,
-        'PENDING' AS ENRICHMENT_STATUS
-    FROM (
-        SELECT DISTINCT
-            APP_ORGANIZATION_ID,
-            APP_BATCH_ID
-        FROM TMP_PERSON_INPUT_STREAM
-    ) T
-    INNER JOIN CUSTOMER.MANAGEMENT.CLIENT C
-        ON C.APP_ORGANIZATION_ID = T.APP_ORGANIZATION_ID
-    INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH B
-        ON B.CLIENT_ID = C.ID
-       AND B.APP_BATCH_ID = T.APP_BATCH_ID
-    INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_OUTPUT_CONFIGURATION CFG
-        ON CFG.APP_ORGANIZATION_ID = T.APP_ORGANIZATION_ID
-       AND CFG.APP_BATCH_ID = T.APP_BATCH_ID
-    , LATERAL FLATTEN(INPUT => CFG.CONFIG_JSON:attributes) A
-    WHERE A.VALUE:code IS NOT NULL
-      AND NOT EXISTS (
-          SELECT 1
-          FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS S
-          WHERE S.CLIENT_ID = B.CLIENT_ID
-            AND S.BATCH_ID = B.ID
-            AND S.APP_BATCH_ID = T.APP_BATCH_ID
-            AND S.ENRICHMENT_TYPE_CODE = A.VALUE:code::VARCHAR
-      );
+    --Insert into queue table with app org id, app batch id, our batch id
+    --queue posts updates to supabase array of batches for approval with their record count, app_batch_id, app_org_id, supabase updated credits_expected, and records count for each file
+    -- supabase checks to see if credits can be reserved or not
+    -- supabase updated reserved credits for ones that can be reserved (should reflect reduced credits in UI at this point)
+    -- supabase inserts all rows for newly reserved batches into snowflake queue for enrichment (supabase updates UI if they cannot proceed due to credits expected/avaialble)
+    -- queue trigers approveBatchForenrichment process
+    -- enrichment completes, in addition to analysis ready, we should also provide record counts to supabase.
+    -- processed record count updated in supabase, credits consumed updated to match processed record count, and credits reserved for record reset to null. (should reflect credit changes in UI here, might go up a little since processed could be less than reserved)
     
-
-    UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH B
-        SET PROCESSED_TS = CURRENT_TIMESTAMP()
-        WHERE EXISTS (
-            SELECT 1
-            FROM TMP_PERSON_INPUT_STREAM T
-            WHERE T.APP_BATCH_ID = B.APP_BATCH_ID
-        );
-        
-    DELETE FROM CUSTOMER.RAW.PERSON_INPUT_PREPROCESSED P
-    WHERE EXISTS (
-        SELECT 1
-        FROM TMP_PERSON_INPUT_STREAM T
-        WHERE T.STORAGE_FILE_NAME = P.STORAGE_FILE_NAME
-          --AND T.SOURCE_ROW_NUMBER = P.FILE_RECORD_ROW_NUMBER
-    );
     
     RETURN 'Processed ' || (SELECT COUNT(*) FROM TMP_PERSON_INPUT_STREAM) || ' stream rows.';
 END;
