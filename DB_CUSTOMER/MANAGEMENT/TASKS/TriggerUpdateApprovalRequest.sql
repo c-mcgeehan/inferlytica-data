@@ -18,3 +18,17 @@ FROM TABLE(
   )
 )
 ORDER BY SCHEDULED_TIME DESC;
+
+SELECT *
+FROM CUSTOMER.MANAGEMENT.CREDIT_APPROVAL_RESULT_QUEUE
+WHERE APP_BATCH_ID  IN
+(
+'dba6bb59-1f8a-47d0-b835-91dd73c9b684',
+'b6d2c6cf-b2bd-4491-b5b2-5bef63274f5f'
+);
+
+SQL compilation error:
+Unknown user-defined function CUSTOMER.FILE_PROCESSING.APPROVE_BATCH_FOR_ENRICHMENT.
+
+--Uncaught exception of type 'STATEMENT_ERROR' on line 35 at position 4 : SQL compilation error:
+Object 'CUSTOMER.FILE_PROCESSING.CREDIT_APPROVAL_QUEUE' does not exist or not authorized.
