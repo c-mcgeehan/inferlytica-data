@@ -18,3 +18,17 @@ FROM TABLE(
   )
 )
 ORDER BY SCHEDULED_TIME DESC;
+
+Python Interpreter Error:
+Traceback (most recent call last):
+  File "_udf_code.py", line 59, in main
+    raise Exception(
+Exception: Supabase approval request failed. Status: 401. Body: {"error":"Unauthorized"}
+ in function SEND_SUPABASE_APPROVAL_REQUEST with handler main
+Python Interpreter Error:
+Traceback (most recent call last):
+  File "_udf_code.py", line 8, in main
+    token = get_generic_secret_string("webhook_secret")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name 'get_generic_secret_string' is not defined
+ in function SEND_SUPABASE_APPROVAL_REQUEST with handler main

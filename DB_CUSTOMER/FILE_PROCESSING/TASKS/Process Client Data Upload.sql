@@ -38,9 +38,5 @@ FROM TABLE(
 )
 ORDER BY SCHEDULED_TIME DESC;
 
-CALL CUSTOMER.FILE_PROCESSING.PROCESS_CLIENT_FILE_TO_RAW();
-
---Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
---Uncaught exception of type 'STATEMENT_ERROR' on line 104 at position 4 : Uncaught exception of type 'STATEMENT_ERROR' on line 31 at position 4 : SQL compilation error: error line 32 at position 8
-invalid identifier 'TGT.SSA_MALE_PROBABILITY'
-invalid identifier 'TGT.SSA_MALE_PROBABILITY'
+Uncaught exception of type 'STATEMENT_ERROR' on line 87 at position 4 : SQL compilation error:
+Object 'CUSTOMER.FILE_PROCESSING.CREDIT_APPROVAL_QUEUE' does not exist or not authorized.

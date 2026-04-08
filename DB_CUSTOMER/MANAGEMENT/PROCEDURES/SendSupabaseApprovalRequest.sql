@@ -5,22 +5,25 @@ LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
 HANDLER = 'main'
 EXTERNAL_ACCESS_INTEGRATIONS = (CUSTOMER_FILE_PROCESSING_SUPABASE_EDGE_ACCESS_INTEGRATION)
-SECRETS = ('webhook_secret' = CUSTOMER.FILE_PROCESSING.BATCH_APPROVAL_WEBHOOK_SECRET)
+SECRETS = ('webhook_secret' = CUSTOMER.MANAGEMENT.BATCH_APPROVAL_WEBHOOK_SECRET)
 PACKAGES = ('snowflake-snowpark-python', 'requests')
 AS
 $$
 import json
 import requests
 import _snowflake
+from snowflake.snowpark.secrets import get_generic_secret_string
 
 def main(session):
+
+    token = get_generic_secret_string("webhook_secret")
     # Pull pending approvals from the stream.
     # Aggregate by org + app batch in case the stream contains multiple change rows.
     sql = """
         SELECT
             Q.APP_ORGANIZATION_ID AS ORGANIZATION_ID,
             Q.APP_BATCH_ID AS BATCH_ID,
-            CREATED_TS AS CREATED_AT
+            Q.CREATED_TS AS CREATED_AT,
             MAX(B.RECORD_COUNT) AS RECORD_COUNT
         FROM CUSTOMER.MANAGEMENT.CREDIT_APPROVAL_QUEUE_STREAM Q
         INNER JOIN CUSTOMER.FILE_PROCESSING.CLIENT_BATCH B
@@ -28,7 +31,7 @@ def main(session):
         WHERE Q.STATUS = 'PENDING' --this is inserted as pending and its an append only stream so don't need this most likely
         GROUP BY
             Q.APP_ORGANIZATION_ID,
-            Q.APP_BATCH_ID
+            Q.APP_BATCH_ID,
             Q.CREATED_TS
     """
     
@@ -42,7 +45,7 @@ def main(session):
             "record_count": int(row["RECORD_COUNT"]) if row["RECORD_COUNT"] is not None else 0,
             "organization_id": row["ORGANIZATION_ID"],
             "batch_id": row["BATCH_ID"],
-            "created_at": row["CREATED_AT"],
+            "created_at": row["CREATED_AT"].isoformat() if row["CREATED_AT"] is not None else None,
         }
         for row in rows
     ]
@@ -55,6 +58,7 @@ def main(session):
 
     headers = {
         'Content-Type': 'application/json',
+        "Authorization": f"Bearer {token}",
         'x-webhook-secret': secret_value
     }
 
