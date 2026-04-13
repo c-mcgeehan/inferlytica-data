@@ -27,8 +27,5 @@ WHERE APP_BATCH_ID  IN
 'b6d2c6cf-b2bd-4491-b5b2-5bef63274f5f'
 );
 
-SQL compilation error:
-Unknown user-defined function CUSTOMER.FILE_PROCESSING.APPROVE_BATCH_FOR_ENRICHMENT.
-
---Uncaught exception of type 'STATEMENT_ERROR' on line 35 at position 4 : SQL compilation error:
-Object 'CUSTOMER.FILE_PROCESSING.CREDIT_APPROVAL_QUEUE' does not exist or not authorized.
+Uncaught exception of type 'STATEMENT_ERROR' on line 101 at position 4 : SQL compilation error:
+Object 'TMP_PERSON_INPUT_STREAM' does not exist or not authorized.

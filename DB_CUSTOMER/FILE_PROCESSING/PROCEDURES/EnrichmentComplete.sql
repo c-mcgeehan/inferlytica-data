@@ -3,6 +3,33 @@ FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_ENRICHMENT_STATUS;
 
 DESC TABLE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH;
 
+SELECT *
+FROm CUSTOMER.FILE_PROCESSING.CLIENT_BATCH;
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_COMPLETION_QUEUE;
+
+SELECT *
+FROM CUSTOMER.RAW.PERSON_INPUT
+WHERE BATCH_ID = 2501;
+
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH p
+INNER JOIN (
+        SELECT
+            CLIENT_ID,
+            BATCH_ID,
+            COUNT(*) AS RECORD_COUNT
+        FROM CUSTOMER.RAW.PERSON_INPUT
+        GROUP BY
+            CLIENT_ID,
+            BATCH_ID
+    ) r
+        ON r.CLIENT_ID = p.CLIENT_ID
+       AND r.BATCH_ID = p.ID
+WHERE p.ID = 2402;
+
 CREATE OR REPLACE PROCEDURE CUSTOMER.FILE_PROCESSING.ENRICHMENT_COMPLETE()
 RETURNS VARCHAR
 LANGUAGE SQL
@@ -42,7 +69,7 @@ BEGIN
 
     UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH cb
     SET
-        DELIVERY_COMPLETE_TS = p.BATCH_PROCESSED_TS,
+        DELIVERY_COMPLETE_TS = :BATCH_PROCESSED_TS,
         PROCESSED_RECORD_COUNT = r.RECORD_COUNT
     FROM BATCHES_TO_COMPLETE p
     INNER JOIN (
@@ -176,7 +203,7 @@ EXCEPTION
         UPDATE CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_COMPLETION_QUEUE Q
         SET
             PROCESSING_STATUS = ''FAILED'',
-            ERROR_MESSAGE = SQLERRM,
+            ERROR_MESSAGE = :SQLERRM,
             UPDATED_TS = CURRENT_TIMESTAMP()
         WHERE EXISTS (
             SELECT 1
@@ -186,9 +213,17 @@ EXCEPTION
         )
           AND Q.PROCESSING_STATUS = ''RUNNING'';
 
-        RETURN ''FAILED - '' || SQLERRM;
+        RETURN ''FAILED - '' || :SQLERRM;
 END;
 ';
 
 SELECT *
 FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_COMPLETION_QUEUE;
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS;
+--HTTP 404: {"error":"No upload file found for this organization_id and batch_id"}*
+
+--HTTP 404: {"error":"No upload file found for this organization_id and batch_id"}
+
+{"batch_id":"e43ae6db-fdc6-4d82-9aaf-f8bd1a27269c","delivery_status":"READY","delivery_status_updated_at":"2026-04-10 15:37:39.025 -0700","file_analysis":[{"analysis_type":"gender_metrics","metrics":[{"metric_display_type":"INTEGER","metric_label_sort":"VALUE","metric_name":"Gender","metric_sort":1,"metric_type":"COUNT","metrics":[{"label":"F","value":48},{"label":"M","value":50},{"label":"U","value":2}]},{"metric_display_type":"INTEGER","metric_label_sort":"CONFIDENCE","metric_name":"Confidence Level","metric_sort":2,"metric_type":"COUNT","metrics":[{"label":"AMBIGUOUS","value":1},{"label":"HIGH","value":97},{"label":"LOW","value":1},{"label":"MEDIUM","value":1}]},{"metric_display_type":"INTEGER","metric_name":"Uncommon Names","metric_sort":3,"metric_type":"COUNT","metrics":[{"label":"TOTAL_UNCOMMON_NAMES","value":0}]},{"metric_display_type":"INTEGER","metric_name":"Missing First Name","metric_sort":4,"metric_type":"COUNT","metrics":[{"label":"MISSING_FIRST_NAME","value":0}]},{"metric_display_type":"PERCENT","metric_name":"Average Max Probability","metric_sort":5,"metric_type":"AVERAGE","metrics":[{"label":"AVERAGE_MAX_PROBABILITY","value":0.981638}]},{"metric_display_type":"PERCENT","metric_name":"Average Probability Gap","metric_sort":6,"metric_type":"AVERAGE","metrics":[{"label":"AVERAGE_PROBABILITY_GAP","value":0.963277}]}]}],"organization_id":"1d96f728-bdc7-4554-8167-89cbd072b075","processed_record_count":100}

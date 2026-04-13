@@ -1,4 +1,10 @@
-CALL CUSTOMER.FILE_PROCESSING.SEND_CLIENT_BATCH_NOTIFICATIONS();
+--CALL CUSTOMER.FILE_PROCESSING.SEND_CLIENT_BATCH_NOTIFICATIONS();
+
+SELECT *
+FROM CUSTOMER.FILE_PROCESSING.CLIENT_BATCH_NOTIFICATIONS
+ORDER BY BATCH_ID DESC;
+{"batch_id":"e43ae6db-fdc6-4d82-9aaf-f8bd1a27269c","delivery_status":"READY","delivery_status_updated_at":"2026-04-10 15:37:39.025 -0700","file_analysis":[{"analysis_type":"gender_metrics","metrics":[{"metric_display_type":"INTEGER","metric_label_sort":"VALUE","metric_name":"Gender","metric_sort":1,"metric_type":"COUNT","metrics":[{"label":"F","value":48},{"label":"M","value":50},{"label":"U","value":2}]},{"metric_display_type":"INTEGER","metric_label_sort":"CONFIDENCE","metric_name":"Confidence Level","metric_sort":2,"metric_type":"COUNT","metrics":[{"label":"AMBIGUOUS","value":1},{"label":"HIGH","value":97},{"label":"LOW","value":1},{"label":"MEDIUM","value":1}]},{"metric_display_type":"INTEGER","metric_name":"Uncommon Names","metric_sort":3,"metric_type":"COUNT","metrics":[{"label":"TOTAL_UNCOMMON_NAMES","value":0}]},{"metric_display_type":"INTEGER","metric_name":"Missing First Name","metric_sort":4,"metric_type":"COUNT","metrics":[{"label":"MISSING_FIRST_NAME","value":0}]},{"metric_display_type":"PERCENT","metric_name":"Average Max Probability","metric_sort":5,"metric_type":"AVERAGE","metrics":[{"label":"AVERAGE_MAX_PROBABILITY","value":0.981638}]},{"metric_display_type":"PERCENT","metric_name":"Average Probability Gap","metric_sort":6,"metric_type":"AVERAGE","metrics":[{"label":"AVERAGE_PROBABILITY_GAP","value":0.963277}]}]}],"organization_id":"1d96f728-bdc7-4554-8167-89cbd072b075","processed_record_count":100}
+
 
 CREATE OR REPLACE PROCEDURE CUSTOMER.FILE_PROCESSING.SEND_CLIENT_BATCH_NOTIFICATIONS()
 RETURNS VARIANT
